@@ -35,7 +35,25 @@ def swap_test(qc, cbit, trash_states, ref_states, swap_states, control_state):
 
 
 def loss_fun(theta):
-
+    num_theta = len(theta)
+    half_num_theta = int(num_theta/2)
+    pars_u = theta[:half_num_theta]
+    pars_v = theta[half_num_theta:]
+    global qc
+    for i_circuit in D_train:
+        # 5: Apply encoders U(θit) and V(θit) on the training data Ei
+        #    to get the channel Π = V(θit) ◦ E_i ◦ U(θit);
+        # 6: Apply Π on a composite system A′ and C1 with states ωA′ and ϕ+ C1;
+        pi_channel = encode_qc(num_qbits, num_trash, i_circuit, encoder_u, encoder_v, pars_u, pars_v)
+        qc.compose(pi_channel, qubits=qr_bits, inplace=True)
+        # 7: Apply a swap test on the “trash” system C2 and ancila system C1′ to estimate the
+        #    fidelity between state of C2 and ϕ+ C1 and calculate Li 3(θit);
+        qc = swap_test(qc, cr, trash_r, ref_r, swap_r, test_r)
+        shots = 1024
+        job = execute(qc, backend, shots=shots)
+        result = job.result()
+        counts = result.get_counts()
+        loss = counts['1']/shots
     return loss
 
 
@@ -87,39 +105,29 @@ init_theta.extend(init_theta_v)
 pars_u = init_theta[:num_u_theta]
 pars_v = init_theta[num_u_theta:]
 converged = False
+opt_y = []
 
 
 # 2: while not converged or the iteration ITR is not satisfied do
+n_iter = 0
 while not converged or n_iter<200:
     # 3: Initialize loss L(θit) = 0;
     loss = 0
     # 4: for each quantum circuit E_i in D_train do
-    for i_circuit in D_train:
-        # 5: Apply encoders U(θit) and V(θit) on the training data Ei
-        #    to get the channel Π = V(θit) ◦ E_i ◦ U(θit);
-        # 6: Apply Π on a composite system A′ and C1 with states ωA′ and ϕ+ C1;
-        pi_channel = encode_qc(num_qbits, num_trash, i_circuit, encoder_u, encoder_v, pars_u, pars_v)
-        qc.compose(pi_channel, qubits=qr_bits, inplace=True)
-        # 7: Apply a swap test on the “trash” system C2 and ancila system C1′ to estimate the
-        #    fidelity between state of C2 and ϕ+ C1 and calculate Li 3(θit);
-        qc = swap_test(qc, cr, trash_r, ref_r, swap_r, test_r)
-        shots = 1024
-        job = execute(qc, backend, shots=shots)
-        result = job.result()
-        counts = result.get_counts()
-        loss = counts['1']/shots
 
         # 8: Let L(θit)+ = n1Li 3(θit);
-        #loss += loss()
+        #loss += loss_fun(theta)
 
         # 9: end for
     # 10: Update parameters θit+1 of L(·) using classical optimizer;
     opt_result = optimizer.minimize(fun=loss_fun, x0=init_theta)
     theta_opt = opt_result.x
-    #print(opt_result)
-    #print(opt_result.fun)
+    print(opt_result)
+    print(opt_result.fun)
+    opt_y.append(opt_result.fun)
     # 11: end while
-    #exit()
+    n_iter += 1
+    exit()
 #return theta_opt
 # 12: Output the optimal parameters θOP T ;
 
