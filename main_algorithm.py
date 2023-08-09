@@ -35,13 +35,6 @@ def swap_test(qc, cbit, ref_states, trash_states, aux_state):
     return qc
 
 
-def fidelity(qc, train_circuit):
-    choi_state = Choi(qc)
-    epilson_choi = Choi(train_circuit)
-    fidelity = state_fidelity(DensityMatrix.from_instruction(choi_state.to_instruction()),
-                              DensityMatrix.from_instruction(epilson_choi.to_instruction()))
-    return fidelity
-
 
 def loss_fun(theta):
 
@@ -60,7 +53,8 @@ num_aux = 1
 qr = QuantumRegister(num_qbits - num_trash)
 trash_r = QuantumRegister(num_trash, 'trash')
 ref_r = QuantumRegister(num_trash, 'ref')
-aux_r = QuantumRegister(num_aux, 'aux')
+aux_r = QuantumRegister(num_qbits, 'aux')
+swap_r = QuantumRegister(num_trash*2, 'swap')
 cr = ClassicalRegister(num_cbits)
 num_circuit = len(D_train)
 objective_func_vals = []
@@ -109,6 +103,9 @@ while not converged or n_iter<200:
         result = job.result()
         counts = result.get_counts()
         loss = counts['1']/shots
+        qc.draw('mpl')
+        plt.show()
+        exit()
 
         # 8: Let L(θit)+ = n1Li 3(θit);
         loss += loss()

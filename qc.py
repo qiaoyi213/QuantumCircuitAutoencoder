@@ -75,7 +75,7 @@ def decode_qc(num_qbits, qc_encode, pars_u, pars_v):
     u2 = u2.inverse()
     v2 = encoder_v.assign_parameters(pars_v2)
     v2 = v2.inverse()
-    decode_qc.compose(u2, qubits=[0,1,2,4] inplace=True)
+    decode_qc.compose(u2, inplace=True)
     decode_qc.compose(qc_encode.to_gate(), inplace=True)
     decode_qc.reset(3)
     decode_qc.compose(v2, inplace=True)
@@ -110,6 +110,7 @@ def loss_fun(theta):
 
     objective_func_vals.append(loss)
     return loss
+
 
 num_qbits = 4
 num_trash = 1
