@@ -25,15 +25,13 @@ def encode_qc(num_qbits, num_trash, train_circuit, encoder_u, encoder_v, pars_u,
     return qc_encode
 
 
-def swap_test(qc, cbit, ref_states, trash_states, aux_state):
-    qc.h(aux_state)
-    for i_ref in ref_states:
-        for i_trash in trash_states:
-            qc.cswap(aux_state, i_ref, i_trash)
-    qc.h(aux_state)
-    qc.measure(aux_state, cbit)
+def swap_test(qc, cbit, trash_states, ref_states, swap_states, control_state):
+    qc.h(control_state)
+    qc.cswap(control_state, trash_states, swap_states[:1])
+    qc.cswap(control_state, ref_states, swap_states[1:])
+    qc.h(control_state)
+    qc.measure(control_state, cbit)
     return qc
-
 
 
 def loss_fun(theta):
@@ -49,23 +47,31 @@ D_train = [train_circuit]
 num_qbits = 4
 num_cbits = 1
 num_trash = 1
-num_aux = 1
 qr = QuantumRegister(num_qbits - num_trash)
 trash_r = QuantumRegister(num_trash, 'trash')
 ref_r = QuantumRegister(num_trash, 'ref')
-aux_r = QuantumRegister(num_qbits, 'aux')
+aux_r = QuantumRegister(num_qbits - num_trash, 'aux')
 swap_r = QuantumRegister(num_trash*2, 'swap')
+test_r = QuantumRegister(1, 'swap_test_control')
 cr = ClassicalRegister(num_cbits)
 num_circuit = len(D_train)
 objective_func_vals = []
 optimizer = COBYLA(maxiter=100)
 backend = Aer.get_backend('statevector_simulator')
 
-qc = QuantumCircuit(qr, trash_r, ref_r, aux_r, cr)
+qc = QuantumCircuit(qr, trash_r, ref_r, aux_r, swap_r, test_r, cr)
 qr_bits = list(range(num_qbits))
 trash_bits = list(range(num_qbits - num_trash, num_qbits))
 ref_bits = list(range(num_qbits, num_qbits + num_trash))
-aux_bits = list(range(num_qbits + num_trash, num_qbits + num_trash + num_aux))
+aux_bits = list(range(num_qbits + num_trash, num_qbits + num_trash + num_qbits - num_trash))
+swap_bits = list(range(num_qbits + num_trash + num_qbits - num_trash,
+                       num_qbits + num_trash + num_qbits - num_trash + num_trash*2))
+control_bit = [num_qbits + num_trash + num_qbits - num_trash + num_trash*2]
+
+qc.h(aux_r)
+qc.cnot(aux_r, qr)
+qc.h(trash_r)
+qc.cnot(trash_r, ref_r)
 
 encoder_u = encoder(num_qbits, reps=2, name='u1')
 encoder_v = encoder(num_qbits, reps=2, name='v1')
@@ -96,25 +102,24 @@ while not converged or n_iter<200:
         qc.compose(pi_channel, qubits=qr_bits, inplace=True)
         # 7: Apply a swap test on the “trash” system C2 and ancila system C1′ to estimate the
         #    fidelity between state of C2 and ϕ+ C1 and calculate Li 3(θit);
-        qc = swap_test(qc, cr, ref_r, trash_r, aux_r)
-        #partial_trace()
+        qc = swap_test(qc, cr, trash_r, ref_r, swap_r, test_r)
         shots = 1024
         job = execute(qc, backend, shots=shots)
         result = job.result()
         counts = result.get_counts()
         loss = counts['1']/shots
-        qc.draw('mpl')
-        plt.show()
-        exit()
 
         # 8: Let L(θit)+ = n1Li 3(θit);
-        loss += loss()
+        #loss += loss()
+
         # 9: end for
     # 10: Update parameters θit+1 of L(·) using classical optimizer;
     opt_result = optimizer.minimize(fun=loss_fun, x0=init_theta)
     theta_opt = opt_result.x
+    #print(opt_result)
+    #print(opt_result.fun)
     # 11: end while
-    exit()
+    #exit()
 #return theta_opt
 # 12: Output the optimal parameters θOP T ;
 
