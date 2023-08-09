@@ -39,7 +39,13 @@ def loss_fun(theta):
     half_num_theta = int(num_theta/2)
     pars_u = theta[:half_num_theta]
     pars_v = theta[half_num_theta:]
-    global qc
+    qc = QuantumCircuit(qr, trash_r, ref_r, aux_r, swap_r, test_r, cr)
+    qc.h(aux_r)
+    qc.cnot(aux_r, qr)
+    qc.h(trash_r)
+    qc.cnot(trash_r, ref_r)
+    qc.h(swap_r[0])
+    qc.cnot(swap_r[0], swap_r[1])
     for i_circuit in D_train:
         # 5: Apply encoders U(θit) and V(θit) on the training data Ei
         #    to get the channel Π = V(θit) ◦ E_i ◦ U(θit);
@@ -49,16 +55,23 @@ def loss_fun(theta):
         # 7: Apply a swap test on the “trash” system C2 and ancila system C1′ to estimate the
         #    fidelity between state of C2 and ϕ+ C1 and calculate Li 3(θit);
         qc = swap_test(qc, cr, trash_r, ref_r, swap_r, test_r)
+        #qc.draw('mpl')
+        #plt.show()
+        #exit()
         shots = 1024
         job = execute(qc, backend, shots=shots)
         result = job.result()
         counts = result.get_counts()
         loss = counts['1']/shots
+    opt_y.append(loss)
     return loss
 
 
 train_circuit = QuantumCircuit(4)
-train_circuit.x(1)
+train_circuit.h(0)
+train_circuit.cnot(0, 1)
+train_circuit.h(2)
+train_circuit.cnot(2, 3)
 D_train = [train_circuit]
 
 
@@ -74,7 +87,7 @@ test_r = QuantumRegister(1, 'swap_test_control')
 cr = ClassicalRegister(num_cbits)
 num_circuit = len(D_train)
 objective_func_vals = []
-optimizer = COBYLA(maxiter=100)
+optimizer = COBYLA(maxiter=1000)
 backend = Aer.get_backend('statevector_simulator')
 
 qc = QuantumCircuit(qr, trash_r, ref_r, aux_r, swap_r, test_r, cr)
@@ -90,9 +103,11 @@ qc.h(aux_r)
 qc.cnot(aux_r, qr)
 qc.h(trash_r)
 qc.cnot(trash_r, ref_r)
+qc.h(swap_r[0])
+qc.cnot(swap_r[0], swap_r[1])
 
-encoder_u = encoder(num_qbits, reps=2, name='u1')
-encoder_v = encoder(num_qbits, reps=2, name='v1')
+encoder_u = encoder(num_qbits, reps=5, name='u1')
+encoder_v = encoder(num_qbits, reps=5, name='v1')
 num_u_theta = encoder_u.num_parameters
 num_v_theta = encoder_v.num_parameters
 
@@ -124,7 +139,8 @@ while not converged or n_iter<200:
     theta_opt = opt_result.x
     print(opt_result)
     print(opt_result.fun)
-    opt_y.append(opt_result.fun)
+    plt.plot(range(len(opt_y)), opt_y)
+    plt.show()
     # 11: end while
     n_iter += 1
     exit()
