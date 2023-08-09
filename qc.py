@@ -50,11 +50,10 @@ def encode_qc(num_qbits, num_trash, train_circuit, encoder_u, encoder_v, pars_u,
     #pars_u = [0.0] * encoder_u.num_parameters
     #pars_v = ParameterVector(name='v_theta', length=encoder_v.num_parameters)
     #pars_v = [0.0] * encoder_v.num_parameters
-    pars_u = list(pars_u)
-    pars_v = list(pars_v)
+#    pars_u = list(pars_u)
+#    pars_v = list(pars_v)
     #encoder_u.decompose().draw('mpl')
     #plt.show()
-
 
     u1 = encoder_u.assign_parameters(pars_u)
     v1 = encoder_v.assign_parameters(pars_v)
@@ -76,7 +75,7 @@ def decode_qc(num_qbits, qc_encode, pars_u, pars_v):
     u2 = u2.inverse()
     v2 = encoder_v.assign_parameters(pars_v2)
     v2 = v2.inverse()
-    decode_qc.compose(u2, inplace=True)
+    decode_qc.compose(u2, qubits=[0,1,2,4] inplace=True)
     decode_qc.compose(qc_encode.to_gate(), inplace=True)
     decode_qc.reset(3)
     decode_qc.compose(v2, inplace=True)
@@ -99,8 +98,8 @@ def loss_1(qc, train_circuit, num_bits, num_circuit):
 
 
 def loss_fun(theta):
-    pars_u = theta[:8]
-    pars_v = theta[8:]
+    pars_u = theta[:12]
+    pars_v = theta[12:]
     print(len(pars_u))
     print(len(pars_v))
     
@@ -116,8 +115,8 @@ num_qbits = 4
 num_trash = 1
 num_circuit = 1
 objective_func_vals = []
-encoder_u = encoder(num_qbits, reps=1, name='u1')
-encoder_v = encoder(num_qbits, reps=1, name='v1')
+encoder_u = encoder(num_qbits, reps=2, name='u1')
+encoder_v = encoder(num_qbits, reps=2, name='v1')
 init_theta_u = list(np.random.rand(encoder_u.num_parameters))
 init_theta_v = list(np.random.rand(encoder_v.num_parameters))
 #print(init_theta_u)
@@ -131,10 +130,12 @@ train_circuit.x(0)
 
 qc_decode = decode_qc(num_qbits, encode_qc(num_qbits, num_trash, train_circuit, encoder_u, encoder_v,
                                init_theta_u, init_theta_v), init_theta_u, init_theta_v)
+qc_decode.draw('mpl')
+plt.show()
 
 #_qc = qc(num_qbits, num_trash, train_circuit, encoder_u, encoder_v, init_theta_u, init_theta_v)
 
-optimizer = COBYLA(maxiter=200)
+optimizer = COBYLA(maxiter=100)
 
 qnn = SamplerQNN(circuit=qc_decode,
                  input_params=init_theta,
