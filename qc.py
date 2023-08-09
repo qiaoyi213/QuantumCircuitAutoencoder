@@ -32,42 +32,109 @@ def matrix_square_root(matrix):
 #    fidelity = np.trace()**2
 #    return fidelity
 
+def encoder(num_bits, reps, name):
+    encoder = RealAmplitudes(num_bits, entanglement='full', reps=reps, name=name)
+    return encoder
+
+def identity_interpret(x):
+    return x
+def qc(num_qbits, num_trash, train_circuit, encoder_u, encoder_v, pars_u, pars_v):
+    qr = QuantumRegister(num_qbits)
+    qc = QuantumCircuit(qr)
+    
+    #encoder_u = RealAmplitudes(4, entanglement='full', reps=1, name='u1')
+    #encoder_v = RealAmplitudes(4, entanglement='full', reps=1, name='v1')
+    #pars_u = ParameterVector(name='u_theta', length=encoder_u.num_parameters)
+    #pars_u = [0.0] * encoder_u.num_parameters
+    #pars_v = ParameterVector(name='v_theta', length=encoder_v.num_parameters)
+    #pars_v = [0.0] * encoder_v.num_parameters
+    #pars_u = list(pars_u)
+    pars_v = list(pars_v)
+    pars_u=[0]*8
+    #encoder_u.decompose().draw('mpl')
+    #plt.show()
+
+
+    u1 = encoder_u.assign_parameters(pars_u)
+    v1 = encoder_v.assign_parameters(pars_v)
+    qc.compose(u1, qr, inplace=True)
+    qc.barrier()
+    qc.compose(train_circuit, qr, inplace=True)
+    qc.barrier()
+    qc.compose(v1, qr, inplace=True)
+
+    return qc
+
+
+def fidelity(qc, train_circuit):
+    choi_state = Choi(qc)
+    epilson_choi = Choi(train_circuit)
+    fidelity = state_fidelity(DensityMatrix.from_instruction(choi_state.to_instruction()),
+                              DensityMatrix.from_instruction(epilson_choi.to_instruction()))
+    return fidelity
+
+
+def loss_1(qc, train_circuit, num_bits, num_circuit):
+    mse = 0.0
+    for i_epsilon in range(num_circuit):
+        mse += fidelity(qc, train_circuit)**2
+    loss = 1.0 - mse/num_bits
+    return loss
+
+
+def loss_fun(theta):
+    pars_u = theta[:8]
+    pars_v = theta[8:]
+    print(len(pars_u))
+    print(len(pars_v))
+    
+    loss = loss_1(qc(num_qbits, num_trash, train_circuit, encoder_u, encoder_v, pars_u, pars_v), train_circuit, num_qbits, num_circuit)
+    return loss
 
 num_qbits = 4
-num_cbits = 0
-num_trash = 2
-qr = QuantumRegister(num_qbits)
-cr = ClassicalRegister(num_cbits)
-qc = QuantumCircuit(qr, cr)
+num_trash = 1
+num_circuit = 1
+
+encoder_u = encoder(num_qbits, reps=1, name='u1')
+encoder_v = encoder(num_qbits, reps=1, name='v1')
+init_theta_u = list(np.random.rand(encoder_u.num_parameters))
+init_theta_v = list(np.random.rand(encoder_v.num_parameters))
+print(init_theta_u)
+print(init_theta_v)
+init_theta = []
+init_theta.extend(init_theta_u)
+init_theta.extend(init_theta_v)
 
 train_circuit = QuantumCircuit(4)
 train_circuit.x(0)
 
-encoder_u = RealAmplitudes(4, entanglement='full', reps=1, name='u1')
-encoder_v = RealAmplitudes(4, entanglement='full', reps=1, name='v1')
-#pars_u = ParameterVector(name='u_theta', length=encoder_u.num_parameters)
-pars_u = [0.0] * encoder_u.num_parameters
-#pars_v = ParameterVector(name='v_theta', length=encoder_v.num_parameters)
-pars_v = [0.0] * encoder_v.num_parameters
-encoder_u.assign_parameters(pars_u, inplace=True)
-encoder_v.assign_parameters(pars_v, inplace=True)
+_qc = qc(num_qbits, num_trash, train_circuit, encoder_u, encoder_v, init_theta_u, init_theta_v)
 
-init_theta = np.random.rand(encoder_u.num_parameters)
+optimizer = COBYLA(maxiter=100)
 
-qc.compose(encoder_u, qr, inplace=True)
-qc.barrier()
-qc.compose(train_circuit, qr, inplace=True)
-qc.barrier()
-qc.compose(encoder_v, qr, inplace=True)
+qnn = SamplerQNN(circuit=_qc,
+                 input_params=init_theta,
+                 weight_params=None,
+                 interpret=identity_interpret,
+                 output_shape=2,
+                 )
+
+opt_result = optimizer.minimize(fun=loss_fun, x0=init_theta)
+print(init_theta)
+print(opt_result.x)
+#error_functions = []
+#for i in range(n):
+#    error_function = fidelity(qc, train_circuit)
+#    error_functions.append(error_function)
+#
+#loss_1 = 1 - np.sum(error_function**2)/n
+
+
 
 #qc.draw('mpl')
 #plt.show()
-choi_state = Choi(qc)
-epilson_choi = Choi(train_circuit)
-print(type(choi_state))
-print(state_fidelity(DensityMatrix.from_instruction(choi_state.to_instruction()),
-                     DensityMatrix.from_instruction(choi_state.to_instruction())))
-backend = Aer.get_backend('statevector_simulator')
+
+#backend = Aer.get_backend('statevector_simulator')
 
 #sv1 = execute(qc, backend).result().get_statevector(qc)
 #print(sv1)
@@ -75,17 +142,8 @@ backend = Aer.get_backend('statevector_simulator')
 
 # l3 = 1-1/N*()**2
 
-#qnn = SamplerQNN(circuit=qc,
-#                 input_params=[],
-#                 weight_params=ae.parameters,
-#                 interpret=identity_interpret,
-#                 output_shape=2,
-#                 )
 #
-#optimizer = COBYLA()
 #
-#initial_point = algorithm_globals.random.random(ae.num_parameters)
-#opt_result = optimizer.minimize(cost_func_domain, initial_point)
 
 
 
