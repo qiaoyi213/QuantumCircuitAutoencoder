@@ -4,9 +4,10 @@ from qiskit.circuit import (QuantumCircuit,
                             QuantumRegister, ClassicalRegister,
                             Parameter, ParameterVector)
 from qiskit.quantum_info import state_fidelity, DensityMatrix, partial_trace
-from qiskit.circuit.library import RealAmplitudes
+from qiskit.circuit.library import RealAmplitudes, U3Gate
 from qiskit_algorithms.optimizers import L_BFGS_B, SLSQP, SPSA, COBYLA
 from qiskit import Aer, execute
+from qiskit.providers.fake_provider import FakeGuadalupeV2
 
 
 def encoder(num_bits, reps, name):
@@ -46,6 +47,7 @@ def loss_fun(theta):
     qc.cnot(trash_r, ref_r)
     qc.h(swap_r[0])
     qc.cnot(swap_r[0], swap_r[1])
+    loss_list = []
     for i_circuit in D_train:
         # 5: Apply encoders U(θit) and V(θit) on the training data Ei
         #    to get the channel Π = V(θit) ◦ E_i ◦ U(θit);
@@ -55,16 +57,15 @@ def loss_fun(theta):
         # 7: Apply a swap test on the “trash” system C2 and ancila system C1′ to estimate the
         #    fidelity between state of C2 and ϕ+ C1 and calculate Li 3(θit);
         qc = swap_test(qc, cr, trash_r, ref_r, swap_r, test_r)
-        #qc.draw('mpl')
-        #plt.show()
-        #exit()
         shots = 1024
         job = execute(qc, backend, shots=shots)
         result = job.result()
         counts = result.get_counts()
         loss = counts['1']/shots
-    opt_y.append(loss)
-    return loss
+        loss_list.append(loss)
+    total_loss = np.sum(loss_list)/len(D_train)
+    opt_y.append(total_loss)
+    return total_loss
 
 
 train_circuit = QuantumCircuit(4)
@@ -73,9 +74,20 @@ train_circuit.cnot(0, 1)
 train_circuit.h(2)
 train_circuit.cnot(2, 3)
 D_train = [train_circuit]
+#D_train = []
 
-
+num_points = 10
 num_qbits = 4
+for i in range(1):
+    circuit = QuantumCircuit(4)
+    for i_qubit in range(num_qbits):
+        circuit.u(np.random.random()*2*np.pi,
+                  np.random.random()*2*np.pi,
+                  np.random.random()*2*np.pi, i_qubit)
+    D_train.append(circuit)
+print('number of training circuit: ', len(D_train))
+
+
 num_cbits = 1
 num_trash = 1
 qr = QuantumRegister(num_qbits - num_trash)
@@ -87,7 +99,7 @@ test_r = QuantumRegister(1, 'swap_test_control')
 cr = ClassicalRegister(num_cbits)
 num_circuit = len(D_train)
 objective_func_vals = []
-optimizer = COBYLA(maxiter=1000)
+optimizer = SPSA(maxiter=200)
 backend = Aer.get_backend('statevector_simulator')
 
 qc = QuantumCircuit(qr, trash_r, ref_r, aux_r, swap_r, test_r, cr)
@@ -139,6 +151,7 @@ while not converged or n_iter<200:
     theta_opt = opt_result.x
     print(opt_result)
     print(opt_result.fun)
+    plt.title(f"number of training circuit: {num_circuit}")
     plt.plot(range(len(opt_y)), opt_y)
     plt.show()
     # 11: end while

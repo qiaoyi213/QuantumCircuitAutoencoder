@@ -19,26 +19,20 @@ def swap_test(qc, ref_state, state1, state2):
     return qc
 
 
-def cost_func_domain(params_values):
-    probabilities = qnn.forward([], params_values)
-    # we pick a probability of getting 1 as the output of the network
-    cost = np.sum(probabilities[:, 1])
-
 def matrix_square_root(matrix):
     evalues, evectors = np.linalg.eig(a)
     sqrt_matrix = evectors * np.sqrt(evalues) @ np.linalg.inv(evectors)
     return sqrt_matrix
 
-#def fidelity(state1, state2t):
-#    fidelity = np.trace()**2
-#    return fidelity
 
 def encoder(num_bits, reps, name):
     encoder = RealAmplitudes(num_bits, entanglement='full', reps=reps, name=name)
     return encoder
 
+
 def identity_interpret(x):
     return x
+
 
 def encode_qc(num_qbits, num_trash, train_circuit, encoder_u, encoder_v, pars_u, pars_v):
     qr = QuantumRegister(num_qbits)
@@ -98,15 +92,20 @@ def loss_1(qc, train_circuit, num_bits, num_circuit):
 
 
 def loss_fun(theta):
+    # half parameter used in RealAmplitudes U, and half used in RealAmplitudes V
+    # number_of_parameters = encoder.num_parameters
     pars_u = theta[:12]
     pars_v = theta[12:]
-    print(len(pars_u))
-    print(len(pars_v))
+    #print(len(pars_u))
+    #print(len(pars_v))
     
     #loss = loss_1(qc(num_qbits, num_trash, train_circuit, encoder_u, encoder_v, pars_u, pars_v), train_circuit, num_qbits, num_circuit)
     loss = loss_1(decode_qc(num_qbits,
-                            encode_qc(num_qbits, num_trash, train_circuit, encoder_u, encoder_v, 
-                               pars_u, pars_v), pars_u, pars_v), train_circuit, num_qbits, num_circuit)
+                            encode_qc(num_qbits, num_trash, 
+                                      train_circuit, encoder_u, encoder_v, 
+                                      pars_u, pars_v),
+                            pars_u, pars_v),
+                  train_circuit, num_qbits, num_circuit)
 
     objective_func_vals.append(loss)
     return loss
@@ -129,8 +128,10 @@ init_theta.extend(init_theta_v)
 train_circuit = QuantumCircuit(4)
 train_circuit.x(0)
 
-qc_decode = decode_qc(num_qbits, encode_qc(num_qbits, num_trash, train_circuit, encoder_u, encoder_v,
-                               init_theta_u, init_theta_v), init_theta_u, init_theta_v)
+qc_decode = decode_qc(num_qbits, encode_qc(num_qbits, num_trash, 
+                                           train_circuit, encoder_u, encoder_v,
+                                           init_theta_u, init_theta_v),
+                      init_theta_u, init_theta_v)
 qc_decode.draw('mpl')
 plt.show()
 
@@ -151,30 +152,3 @@ print(init_theta)
 print(opt_result)
 plt.plot(range(len(objective_func_vals)), objective_func_vals)
 plt.show()
-#error_functions = []
-#for i in range(n):
-#    error_function = fidelity(qc, train_circuit)
-#    error_functions.append(error_function)
-#
-#loss_1 = 1 - np.sum(error_function**2)/n
-
-
-
-#qc.draw('mpl')
-#plt.show()
-
-#backend = Aer.get_backend('statevector_simulator')
-
-#sv1 = execute(qc, backend).result().get_statevector(qc)
-#print(sv1)
-#state_fidelity()
-
-# l3 = 1-1/N*()**2
-
-#
-#
-
-
-
-
-
